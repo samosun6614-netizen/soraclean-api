@@ -4,7 +4,7 @@ import requests
 import re
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins="*", methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type", "Authorization"])
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
@@ -45,6 +45,13 @@ def find_video_url(data, depth=0):
                 return result
     return None
 
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
 @app.route('/')
 def index():
     return jsonify({"status": "ok", "service": "SoraClean API"})
@@ -53,8 +60,11 @@ def index():
 def health():
     return jsonify({"status": "ok"})
 
-@app.route('/api/clean', methods=['POST'])
+@app.route('/api/clean', methods=['POST', 'OPTIONS'])
 def clean_video():
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+    
     data = request.get_json(silent=True) or {}
     url = data.get('url', '').strip()
     if not url:
@@ -94,3 +104,4 @@ if __name__ == '__main__':
     import os
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+            

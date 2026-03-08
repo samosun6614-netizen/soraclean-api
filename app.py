@@ -5,7 +5,6 @@ import os
 app = Flask(__name__)
 
 SORATOOLS_KEY = 'dfd93e3d-6068-4f27-85f3-bbd0d2ed12ce'
-SORATOOLS_URL = 'https://sora.thirdme.com/api/v1/remove-watermark'
 
 def add_cors(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
@@ -17,11 +16,11 @@ def add_cors(response):
 def after_request(response):
     return add_cors(response)
 
-@app.route('/', methods=['GET'])
+@app.route('/')
 def index():
-    return jsonify({"status": "ok", "service": "SoraClean API"})
+    return jsonify({"status": "ok"})
 
-@app.route('/api/health', methods=['GET'])
+@app.route('/api/health')
 def health():
     return jsonify({"status": "ok"})
 
@@ -30,15 +29,15 @@ def clean_video():
     if request.method == 'OPTIONS':
         return make_response('', 200)
 
-    data = request.get_json(silent=True) or {}
-    url = data.get('url', '').strip()
+    body = request.get_json(silent=True) or {}
+    url = body.get('url', '').strip()
 
     if not url:
         return jsonify({"success": False, "error": "No URL provided"}), 400
 
     try:
         res = requests.post(
-            SORATOOLS_URL,
+            'https://sora.thirdme.com/api/v1/remove-watermark',
             json={"url": url},
             headers={
                 "Authorization": f"Bearer {SORATOOLS_KEY}",
@@ -46,20 +45,36 @@ def clean_video():
             },
             timeout=30
         )
-        data = res.json()
-        print("SoraTools response:", data)
-
-        if data.get('status') == 'success' and data.get('data'):
-            clean_url = data['data'].get('links', {}).get('mp4NoWatermark') or data['data'].get('url')
+        
+        # Return full response for debugging
+        raw = res.json()
+        print("SoraTools full response:", raw)
+        print("Status code:", res.status_code)
+        
+        # Try to find clean URL anywhere in response
+        if res.status_code == 200:
+            d = raw.get('data', {})
+            links = d.get('links', {})
+            clean_url = (
+                links.get('mp4NoWatermark') or
+                links.get('mp4') or
+                d.get('url') or
+                raw.get('url')
+            )
             if clean_url:
                 return jsonify({"success": True, "clean_url": clean_url})
         
-        return jsonify({"success": False, "error": data.get('message', 'Processing failed')}), 400
+        # Return full response so frontend can show it
+        return jsonify({
+            "success": False, 
+            "error": str(raw),
+            "status_code": res.status_code
+        }), 400
 
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)[:100]}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-    
+        
